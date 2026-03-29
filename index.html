@@ -183,6 +183,18 @@ input[type="file"] { display:none; }
   -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
   background:var(--accent); cursor:pointer; box-shadow:0 0 8px rgba(0,229,255,0.4);
 }
+.preset-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.4rem; margin-bottom:0.6rem; }
+.preset-btn {
+  padding:9px 6px; border-radius:8px;
+  border:1px solid var(--border); background:var(--card);
+  color:var(--muted); font-family:'Outfit',sans-serif;
+  font-size:0.76rem; font-weight:600; cursor:pointer;
+  transition:all 0.18s; text-align:center; touch-action:manipulation;
+}
+.preset-btn:active { transform:scale(0.94); }
+.preset-btn.active { background:rgba(0,229,255,0.1); border-color:var(--accent); color:var(--accent); }
+.preset-hint { font-size:0.65rem; color:var(--muted); text-align:center; margin-bottom:0.2rem; min-height:14px; }
+
 .reset-btn {
   width:100%; padding:9px; border-radius:8px; margin-top:1rem;
   border:1px solid var(--border); background:transparent;
@@ -277,7 +289,7 @@ input[type="file"] { display:none; }
         <div class="stat"><div class="stat-l">Engine</div><div class="stat-v">WebGL</div></div>
       </div>
       <div class="canvas-box">
-        <video id="srcVideo" loop playsinline muted></video>
+        <video id="srcVideo" loop playsinline></video>
         <canvas id="glCanvas"></canvas>
       </div>
       <div class="video-info" id="videoInfo"></div>
@@ -305,14 +317,25 @@ input[type="file"] { display:none; }
           <button class="res-btn" data-h="0">Original</button>
           <button class="res-btn" data-h="720">HD 720p</button>
           <button class="res-btn active" data-h="1080">FHD 1080p</button>
-          <button class="res-btn" data-h="1440">QHD 1440p</button>
+          <button class="res-btn" data-h="1440">2K 1440p</button>
           <button class="res-btn" data-h="2160">4K UHD ✨</button>
         </div>
-        <div class="res-warn" id="resWarn">⚠ 4K sangat berat di mobile — export bisa lambat. Disarankan 1080p untuk HP.</div>
+        <div class="res-warn" id="resWarn">⚠ 2K/4K berat di mobile — export bisa lambat. Disarankan 1080p untuk HP.</div>
       </div>
 
       <!-- Enhance -->
       <div class="tab-panel" id="tab-enhance">
+        <div class="sec-label" style="margin-bottom:0.6rem">⚡ Quick Preset</div>
+        <div class="preset-grid">
+          <button class="preset-btn" data-preset="hd">🔥 Auto HD</button>
+          <button class="preset-btn" data-preset="cinema">🎬 Cinema</button>
+          <button class="preset-btn" data-preset="clear">💎 Sharp</button>
+          <button class="preset-btn" data-preset="vivid">🌈 Vivid</button>
+        </div>
+        <div class="preset-hint" id="presetHint">Pilih preset untuk langsung aktifkan enhancement</div>
+
+        <div style="height:1px;background:var(--border);margin:0.9rem 0;"></div>
+
         <div class="ctrl">
           <div class="ctrl-row"><span class="ctrl-name">🔆 Brightness</span><span class="ctrl-val" id="vBright">0</span></div>
           <input type="range" class="slider" id="sBright" min="-100" max="100" value="0">
@@ -449,6 +472,32 @@ function renderFrame(){
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 }
 
+// ── Presets ────────────────────────────────────
+const PRESETS = {
+  hd:     {bright:5,  contrast:15, sharp:40, denoise:10, sat:10, temp:0,   vib:15, label:'🔥 Auto HD aktif'},
+  cinema: {bright:-5, contrast:25, sharp:20, denoise:5,  sat:15, temp:-15, vib:10, label:'🎬 Cinema aktif'},
+  clear:  {bright:0,  contrast:10, sharp:65, denoise:15, sat:5,  temp:0,   vib:5,  label:'💎 Sharp aktif'},
+  vivid:  {bright:5,  contrast:20, sharp:25, denoise:0,  sat:40, temp:10,  vib:30, label:'🌈 Vivid aktif'},
+};
+const sMapFull = {bright:'sBright',contrast:'sContrast',sharp:'sSharp',denoise:'sDenoise',sat:'sSat',temp:'sTemp',vib:'sVib'};
+
+function applyPreset(name){
+  const p=PRESETS[name];
+  Object.entries(p).forEach(([k,v])=>{
+    if(k==='label')return;
+    const sid=sMapFull[k]; if(!sid)return;
+    const el=document.getElementById(sid); el.value=v;
+    const vid2=sMap[sid]; if(vid2)document.getElementById(vid2).textContent=v;
+  });
+  document.querySelectorAll('.preset-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.preset-btn[data-preset="${name}"]`).classList.add('active');
+  document.getElementById('presetHint').textContent=p.label;
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>applyPreset(btn.dataset.preset));
+});
+
 // ── Resolution ─────────────────────────────────
 let targetH=1080;
 function applyResolution(){
@@ -476,7 +525,11 @@ function loadFile(file){
       `<span class="vi-badge">💾 <b>${mb}MB</b></span>`+
       `<span class="vi-badge">📐 <b>${video.videoWidth}×${video.videoHeight}</b></span>`+
       `<span class="vi-badge">⏱ <b>${fmt(video.duration)}</b></span>`;
-    video.play();document.getElementById('playBtn').textContent='⏸';
+    // Mute for autoplay policy, unmute after first interaction
+    video.muted=true;
+    video.play().then(()=>{
+      document.getElementById('playBtn').textContent='⏸';
+    }).catch(()=>{});
     if(raf)cancelAnimationFrame(raf);renderFrame();
   };
   video.ontimeupdate=()=>{
@@ -535,13 +588,14 @@ document.querySelectorAll('.res-btn').forEach(btn=>{
     document.querySelectorAll('.res-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     targetH=parseInt(btn.dataset.h)||0;
-    document.getElementById('resWarn').classList.toggle('show',targetH===2160);
+    document.getElementById('resWarn').classList.toggle('show',targetH>=1440);
     if(loaded)applyResolution();
   });
 });
 
 // Playback
 document.getElementById('playBtn').addEventListener('click',()=>{
+  video.muted=false; // unmute on user interaction
   if(video.paused){video.play();document.getElementById('playBtn').textContent='⏸';}
   else{video.pause();document.getElementById('playBtn').textContent='▶';}
 });
@@ -583,28 +637,51 @@ document.getElementById('exportBtn').addEventListener('click',async()=>{
   await new Promise(r=>{video.onseeked=r;});
   video.play();
 
-  const stream=canvas.captureStream(30);
-  try{
-    const actx=new AudioContext();
-    const src=actx.createMediaElementSource(video);
-    const dest=actx.createMediaStreamDestination();
-    src.connect(dest);src.connect(actx.destination);
-    dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));
-  }catch(e){}
+  // Build combined stream — video tracks FIRST, then audio
+  const canvasStream = canvas.captureStream(30);
+  const combinedStream = new MediaStream();
+  canvasStream.getVideoTracks().forEach(t => combinedStream.addTrack(t));
 
+  // AudioContext hanya dibuat sekali (tidak boleh createMediaElementSource 2x)
+  video.muted = false;
+  try {
+    if (!window._cvAudioCtx) {
+      window._cvAudioCtx = new AudioContext();
+      window._cvAudioSrc = window._cvAudioCtx.createMediaElementSource(video);
+    }
+    if (window._cvAudioCtx.state === 'suspended') await window._cvAudioCtx.resume();
+    const dest = window._cvAudioCtx.createMediaStreamDestination();
+    window._cvAudioSrc.connect(dest);
+    window._cvAudioSrc.connect(window._cvAudioCtx.destination);
+    dest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+  } catch(e) { console.warn('Audio capture failed:', e); }
+
+  // Cek video track ada
+  if (combinedStream.getVideoTracks().length === 0) {
+    btn.disabled=false;
+    pWrap.classList.remove('show'); recRow.classList.remove('show');
+    pText.textContent='❌ Gagal: tidak ada video track. Coba lagi.';
+    return;
+  }
+
+  // Dynamic bitrate based on resolution
+  const bpsMap={720:5_000_000,1080:12_000_000,1440:20_000_000,2160:40_000_000,0:8_000_000};
+  const bps=bpsMap[targetH]||12_000_000;
   const mime=pickMime(chosenFmt);
   const ext=mime.startsWith('video/mp4')?'mp4':'webm';
   if(chosenFmt==='mp4'&&ext!=='mp4')pText.textContent='⚠ Fallback ke WebM...';
 
   const chunks=[];
-  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:16_000_000});
+  const rec=new MediaRecorder(combinedStream,{mimeType:mime,videoBitsPerSecond:bps});
   rec.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data);};
   rec.onstop=()=>{
-    const blob=new Blob(chunks,{type:mime});
+    const blobType = ext==='mp4'?'video/mp4':'video/webm';
+    const blob=new Blob(chunks,{type:blobType});
+    const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);a.download='clearvid_enhanced.'+ext;
+    a.href=url; a.download='clearvid_enhanced.'+ext;
     document.body.appendChild(a);a.click();
-    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(a.href);},1000);
+    setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},2000);
     btn.disabled=false;
     pWrap.classList.remove('show');recRow.classList.remove('show');
     pFill.style.width='0%';pText.textContent='';
